@@ -153,6 +153,100 @@ async function run() {
         });
       }
     });
+    // //  get all pet
+    //     app.get("/pets", async (req, res) => {
+    //       try {
+    //         const pets = await petCollection.find().toArray();
+    //         res.json({ pets });
+    //       } catch (error) {
+    //         console.error("Server error while fetching pets:", error);
+    //         res.status(500).json({
+    //           message: "Failed to fetch pets",
+    //           error: error.message,
+    //         });
+    //       }
+    //     });
+    // app.get("/pets", async (req, res) => {
+    //   try {
+    //     const { name, category } = req.query;
+
+    //     // Create a filter object
+    //     const filter = {};
+
+    //     // If a name is provided, perform a case-insensitive search
+    //     if (name) {
+    //       filter.name = { $regex: name, $options: "i" };
+    //     }
+
+    //     // If a category is provided, filter by category
+    //     if (category) {
+    //       filter.category = category;
+    //     }
+
+    //     // Fetch pets from the database with the filter
+    //     const pets = await petCollection.find(filter).sort({ createdAt: -1 }).toArray();
+    //     res.json({ pets });
+    //   } catch (error) {
+    //     console.error("Server error while fetching pets:", error);
+    //     res.status(500).json({
+    //       message: "Failed to fetch pets",
+    //       error: error.message,
+    //     });
+    //   }
+    // });
+    app.get("/pets", async (req, res) => {
+      try {
+        const { name, category, page = 1, limit = 9 } = req.query;
+        const filters = { adopted: false };
+
+        if (name) {
+          filters.name = { $regex: name, $options: "i" }; // Case-insensitive search
+        }
+        if (category) {
+          filters.category = category;
+        }
+
+        const pets = await petCollection
+          .find(filters)
+          .sort({ createdAt: -1 }) // Sort by date descending
+          .skip((page - 1) * limit)
+          .limit(parseInt(limit))
+          .toArray();
+
+        const totalCount = await petCollection.countDocuments(filters);
+
+        res.json({ pets, totalCount });
+      } catch (error) {
+        console.error("Error fetching pets:", error);
+        res.status(500).json({ message: "Failed to fetch pets", error });
+      }
+    });
+
+    // get pet by id
+    app.get("/pets/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        // Validate ID
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ message: "Invalid pet ID" });
+        }
+
+        const petId = new ObjectId(id);
+        const pet = await petCollection.findOne({ _id: petId });
+
+        if (!pet) {
+          return res.status(404).json({ message: "Pet not found" });
+        }
+
+        res.json(pet); // Return the pet object directly
+      } catch (error) {
+        console.error("Error fetching pet by ID:", error);
+        res
+          .status(500)
+          .json({ message: "Failed to fetch pet", error: error.message });
+      }
+    });
 
     console.log("Connected to MongoDB and server ready!");
   } catch (error) {
