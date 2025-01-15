@@ -48,7 +48,111 @@ async function run() {
       const result = await userCollection.insertOne(newUser);
       res.status(201).send({ message: "User added successfully", result });
     });
-    
+
+    const petCollection = database.collection("pets");
+
+    // Add Pet API with improved validation and error handling
+    app.post("/pets/add", async (req, res) => {
+      try {
+        const {
+          name,
+          age,
+          category,
+          location,
+          shortDescription,
+          longDescription,
+          imageUrl,
+        } = req.body;
+
+        // Comprehensive input validation
+        const validationErrors = [];
+
+        if (!name || typeof name !== "string" || name.trim().length === 0) {
+          validationErrors.push("Valid pet name is required");
+        }
+
+        if (!age || typeof age !== "number" || age < 0) {
+          validationErrors.push("Valid pet age is required");
+        }
+
+        if (
+          !category ||
+          typeof category !== "string" ||
+          category.trim().length === 0
+        ) {
+          validationErrors.push("Valid pet category is required");
+        }
+
+        if (
+          !location ||
+          typeof location !== "string" ||
+          location.trim().length === 0
+        ) {
+          validationErrors.push("Valid pet location is required");
+        }
+
+        if (
+          !shortDescription ||
+          typeof shortDescription !== "string" ||
+          shortDescription.trim().length === 0 ||
+          shortDescription.length > 150
+        ) {
+          validationErrors.push(
+            "Valid short description is required (max 150 characters)"
+          );
+        }
+
+        if (
+          !longDescription ||
+          typeof longDescription !== "string" ||
+          longDescription.trim().length === 0
+        ) {
+          validationErrors.push("Valid long description is required");
+        }
+
+        if (
+          !imageUrl ||
+          typeof imageUrl !== "string" ||
+          !imageUrl.startsWith("http")
+        ) {
+          validationErrors.push("Valid image URL is required");
+        }
+
+        if (validationErrors.length > 0) {
+          return res.status(400).json({
+            message: "Validation failed",
+            errors: validationErrors,
+          });
+        }
+
+        const newPet = {
+          name: name.trim(),
+          age,
+          category: category.trim(),
+          location: location.trim(),
+          shortDescription: shortDescription.trim(),
+          longDescription: longDescription.trim(),
+          imageUrl,
+          adopted: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        const result = await petCollection.insertOne(newPet);
+
+        res.status(201).json({
+          message: "Pet added successfully",
+          petId: result.insertedId,
+          pet: newPet,
+        });
+      } catch (error) {
+        console.error("Server error while adding pet:", error);
+        res.status(500).json({
+          message: "Failed to add pet",
+          error: error.message,
+        });
+      }
+    });
 
     console.log("Connected to MongoDB and server ready!");
   } catch (error) {
