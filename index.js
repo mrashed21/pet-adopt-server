@@ -79,25 +79,48 @@ async function run() {
       }
     });
 
-    // Add user to database
+    // add user on database
     app.post("/users/add", async (req, res) => {
-      const user = req.body;
-      const existingUser = await userCollection.findOne({ email: user.email });
-      if (existingUser) {
-        return res.status(200).send({ message: "User already exists" });
-      }
-      const newUser = {
-        ...user,
-        role: user.role || "user",
-        createdAt: new Date(),
-      };
-      const result = await userCollection.insertOne(newUser);
-      res.status(201).send({ message: "User added successfully", result });
-    });
+      try {
+        const user = req.body;
+        const existingUser = await userCollection.findOne({
+          email: user.email,
+        });
 
+        if (existingUser) {
+          // Update existing user's information
+          await userCollection.updateOne(
+            { email: user.email },
+            {
+              $set: {
+                name: user.name,
+                photoURL: user.photoURL,
+                role: user.role || "user",
+                updatedAt: new Date(),
+              },
+            }
+          );
+          return res.status(200).send({ message: "User information updated" });
+        }
+
+        // Create new user
+        const newUser = {
+          ...user,
+          role: user.role || "user",
+          createdAt: new Date(),
+        };
+        const result = await userCollection.insertOne(newUser);
+        res.status(201).send({ message: "User added successfully", result });
+      } catch (error) {
+        res.status(500).send({
+          message: "Error processing user data",
+          error: error.message,
+        });
+      }
+    });
     const petCollection = database.collection("pets");
 
-    // Add Pet API with improved validation and error handling
+    // Add Pet
     app.post("/pets/add", async (req, res) => {
       try {
         const {
@@ -206,7 +229,7 @@ async function run() {
         const filters = { adopted: false };
 
         if (name) {
-          filters.name = { $regex: name, $options: "i" }; // Case-insensitive search
+          filters.name = { $regex: name, $options: "i" };
         }
         if (category) {
           filters.category = category;
@@ -214,7 +237,7 @@ async function run() {
 
         const pets = await petCollection
           .find(filters)
-          .sort({ createdAt: -1 }) // Sort by date descending
+          .sort({ createdAt: -1 })
           .skip((page - 1) * limit)
           .limit(parseInt(limit))
           .toArray();
@@ -232,20 +255,15 @@ async function run() {
     app.get("/pets/:id", async (req, res) => {
       try {
         const { id } = req.params;
-
-        // Validate ID
         if (!ObjectId.isValid(id)) {
           return res.status(400).json({ message: "Invalid pet ID" });
         }
-
         const petId = new ObjectId(id);
         const pet = await petCollection.findOne({ _id: petId });
-
         if (!pet) {
           return res.status(404).json({ message: "Pet not found" });
         }
-
-        res.json(pet); // Return the pet object directly
+        res.json(pet);
       } catch (error) {
         console.error("Error fetching pet by ID:", error);
         res
@@ -259,7 +277,6 @@ async function run() {
       if (!email) {
         return res.status(400).send({ message: "Email is required" });
       }
-
       try {
         const query = { userEmail: email };
         const pets = await petCollection.find(query).toArray();
@@ -269,7 +286,6 @@ async function run() {
             .status(404)
             .send({ message: "No pets found for this user" });
         }
-
         res.send(pets);
       } catch (error) {
         console.error("Error fetching pets:", error);
@@ -281,26 +297,19 @@ async function run() {
     app.post("/adopt", async (req, res) => {
       try {
         const { petId, userName, userEmail, userPhone, userAddress } = req.body;
-
-        // Validate the request data
         if (!petId || !userName || !userEmail || !userPhone || !userAddress) {
           return res.status(400).json({ message: "All fields are required." });
         }
-
-        // Fetch pet from the database
         const pet = await petCollection.findOne({ _id: new ObjectId(petId) });
 
         if (!pet) {
           return res.status(404).json({ message: "Pet not found." });
         }
-
-        // Check if the pet has already been adopted
         if (pet.adopted) {
           return res
             .status(400)
             .json({ message: "This pet has already been adopted." });
         }
-
         // Create an adoption request
         const adoptionRequest = {
           petId,
@@ -309,7 +318,7 @@ async function run() {
           userEmail,
           userPhone,
           userAddress,
-          status: "Pending", // Adoption status can be "Pending", "Approved", "Rejected"
+          status: "Pending",
           createdAt: new Date(),
         };
 
@@ -351,7 +360,7 @@ async function run() {
 run().catch(console.dir);
 
 app.get("/", (req, res) => {
-  res.send("Service Provider server is running");
+  res.send("Pet server is running");
 });
 
 app.listen(port, () => {
