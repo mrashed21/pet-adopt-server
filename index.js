@@ -27,11 +27,57 @@ const client = new MongoClient(uri, {
   },
 });
 
+const verifyToken = (req, res, next) => {
+  const token = req.cookies?.token;
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "unauthorized access" });
+    }
+
+    req.user = decoded;
+    next();
+  });
+};
+
 async function run() {
   try {
+    // Connect the client to the server (optional starting in v4.7)
     // await client.connect();
     const database = client.db("petAdoptDB");
     const userCollection = database.collection("users");
+
+    app.post("/jwt", async (req, res) => {
+      const email = req.body;
+      const token = jwt.sign(email, process.env.JWT_SECRET, {
+        expiresIn: "365d",
+      });
+
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true });
+    });
+
+    app.post("/logout", async (req, res) => {
+      try {
+        res.clearCookie("token", {
+          maxAge: 0,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        });
+
+        return res.status(200).send({ success: true });
+      } catch (error) {
+        return res.status(500).send({ message: "Server error" });
+      }
+    });
 
     // Add user to database
     app.post("/users/add", async (req, res) => {
@@ -153,47 +199,7 @@ async function run() {
         });
       }
     });
-    // //  get all pet
-    //     app.get("/pets", async (req, res) => {
-    //       try {
-    //         const pets = await petCollection.find().toArray();
-    //         res.json({ pets });
-    //       } catch (error) {
-    //         console.error("Server error while fetching pets:", error);
-    //         res.status(500).json({
-    //           message: "Failed to fetch pets",
-    //           error: error.message,
-    //         });
-    //       }
-    //     });
-    // app.get("/pets", async (req, res) => {
-    //   try {
-    //     const { name, category } = req.query;
 
-    //     // Create a filter object
-    //     const filter = {};
-
-    //     // If a name is provided, perform a case-insensitive search
-    //     if (name) {
-    //       filter.name = { $regex: name, $options: "i" };
-    //     }
-
-    //     // If a category is provided, filter by category
-    //     if (category) {
-    //       filter.category = category;
-    //     }
-
-    //     // Fetch pets from the database with the filter
-    //     const pets = await petCollection.find(filter).sort({ createdAt: -1 }).toArray();
-    //     res.json({ pets });
-    //   } catch (error) {
-    //     console.error("Server error while fetching pets:", error);
-    //     res.status(500).json({
-    //       message: "Failed to fetch pets",
-    //       error: error.message,
-    //     });
-    //   }
-    // });
     app.get("/pets", async (req, res) => {
       try {
         const { name, category, page = 1, limit = 9 } = req.query;
@@ -247,17 +253,105 @@ async function run() {
           .json({ message: "Failed to fetch pet", error: error.message });
       }
     });
+    app.get("/pet/me/:email", async (req, res) => {
+      const { email } = req.params;
 
-    console.log("Connected to MongoDB and server ready!");
+      if (!email) {
+        return res.status(400).send({ message: "Email is required" });
+      }
+
+      try {
+        const query = { userEmail: email };
+        const pets = await petCollection.find(query).toArray();
+
+        if (!pets || pets.length === 0) {
+          return res
+            .status(404)
+            .send({ message: "No pets found for this user" });
+        }
+
+        res.send(pets);
+      } catch (error) {
+        console.error("Error fetching pets:", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
+    });
+
+    // Add Adoption Route
+    app.post("/adopt", async (req, res) => {
+      try {
+        const { petId, userName, userEmail, userPhone, userAddress } = req.body;
+
+        // Validate the request data
+        if (!petId || !userName || !userEmail || !userPhone || !userAddress) {
+          return res.status(400).json({ message: "All fields are required." });
+        }
+
+        // Fetch pet from the database
+        const pet = await petCollection.findOne({ _id: new ObjectId(petId) });
+
+        if (!pet) {
+          return res.status(404).json({ message: "Pet not found." });
+        }
+
+        // Check if the pet has already been adopted
+        if (pet.adopted) {
+          return res
+            .status(400)
+            .json({ message: "This pet has already been adopted." });
+        }
+
+        // Create an adoption request
+        const adoptionRequest = {
+          petId,
+          petName: pet.name,
+          userName,
+          userEmail,
+          userPhone,
+          userAddress,
+          status: "Pending", // Adoption status can be "Pending", "Approved", "Rejected"
+          createdAt: new Date(),
+        };
+
+        // Insert adoption request into the database
+        const result = await database
+          .collection("adoptionRequests")
+          .insertOne(adoptionRequest);
+
+        // Update pet status to adopted
+        await petCollection.updateOne(
+          { _id: new ObjectId(petId) },
+          { $set: { adopted: true, updatedAt: new Date() } }
+        );
+
+        res.status(201).json({
+          message: "Adoption request submitted successfully.",
+          adoptionRequestId: result.insertedId,
+        });
+      } catch (error) {
+        console.error("Error during adoption process:", error);
+        res.status(500).json({
+          message: "Failed to submit adoption request.",
+          error: error.message,
+        });
+      }
+    });
+    await client.db("admin").command({ ping: 1 });
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
   } catch (error) {
     console.error("Failed to connect to MongoDB", error);
+  } finally {
+    // Ensures that the client will close when you finish/error
+    // await client.close();
   }
 }
 
 run().catch(console.dir);
 
 app.get("/", (req, res) => {
-  res.send("Pet Adopt server is running");
+  res.send("Service Provider server is running");
 });
 
 app.listen(port, () => {
