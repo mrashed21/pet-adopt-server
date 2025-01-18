@@ -48,8 +48,8 @@ async function run() {
     // Connect the client to the server (optional starting in v4.7)
     // await client.connect();
     const database = client.db("petAdoptDB");
-    const userCollection = database.collection("users");
 
+    // genarate json token
     app.post("/jwt", async (req, res) => {
       const email = req.body;
       const token = jwt.sign(email, process.env.JWT_SECRET, {
@@ -64,7 +64,7 @@ async function run() {
         })
         .send({ success: true });
     });
-
+    // clear json token
     app.post("/logout", async (req, res) => {
       try {
         res.clearCookie("token", {
@@ -78,7 +78,8 @@ async function run() {
         return res.status(500).send({ message: "Server error" });
       }
     });
-
+    // user collection
+    const userCollection = database.collection("users");
     // add user on database
     app.post("/users/add", async (req, res) => {
       try {
@@ -118,10 +119,111 @@ async function run() {
         });
       }
     });
+    // pet collection
     const petCollection = database.collection("pets");
 
     // Add Pet
     app.post("/pets/add", async (req, res) => {
+      // try {
+      //   const {
+      //     name,
+      //     age,
+      //     category,
+      //     location,
+      //     shortDescription,
+      //     longDescription,
+      //     imageUrl,
+      //   } = req.body;
+
+      //   // Comprehensive input validation
+      //   const validationErrors = [];
+
+      //   if (!name || typeof name !== "string" || name.trim().length === 0) {
+      //     validationErrors.push("Valid pet name is required");
+      //   }
+
+      //   if (!age || typeof age !== "number" || age < 0) {
+      //     validationErrors.push("Valid pet age is required");
+      //   }
+
+      //   if (
+      //     !category ||
+      //     typeof category !== "string" ||
+      //     category.trim().length === 0
+      //   ) {
+      //     validationErrors.push("Valid pet category is required");
+      //   }
+
+      //   if (
+      //     !location ||
+      //     typeof location !== "string" ||
+      //     location.trim().length === 0
+      //   ) {
+      //     validationErrors.push("Valid pet location is required");
+      //   }
+
+      //   if (
+      //     !shortDescription ||
+      //     typeof shortDescription !== "string" ||
+      //     shortDescription.trim().length === 0 ||
+      //     shortDescription.length > 150
+      //   ) {
+      //     validationErrors.push(
+      //       "Valid short description is required (max 150 characters)"
+      //     );
+      //   }
+
+      //   if (
+      //     !longDescription ||
+      //     typeof longDescription !== "string" ||
+      //     longDescription.trim().length === 0
+      //   ) {
+      //     validationErrors.push("Valid long description is required");
+      //   }
+
+      //   if (
+      //     !imageUrl ||
+      //     typeof imageUrl !== "string" ||
+      //     !imageUrl.startsWith("http")
+      //   ) {
+      //     validationErrors.push("Valid image URL is required");
+      //   }
+
+      //   if (validationErrors.length > 0) {
+      //     return res.status(400).json({
+      //       message: "Validation failed",
+      //       errors: validationErrors,
+      //     });
+      //   }
+
+      //   const newPet = {
+      //     name: name.trim(),
+      //     age,
+      //     category: category.trim(),
+      //     location: location.trim(),
+      //     shortDescription: shortDescription.trim(),
+      //     longDescription: longDescription.trim(),
+      //     imageUrl,
+      //     adopted: false,
+      //     createdAt: new Date(),
+      //     updatedAt: new Date(),
+      //     userEmail,
+      //   };
+
+      //   const result = await petCollection.insertOne(newPet);
+
+      //   res.status(201).json({
+      //     message: "Pet added successfully",
+      //     petId: result.insertedId,
+      //     pet: newPet,
+      //   });
+      // } catch (error) {
+      //   console.error("Server error while adding pet:", error);
+      //   res.status(500).json({
+      //     message: "Failed to add pet",
+      //     error: error.message,
+      //   });
+      // }
       try {
         const {
           name,
@@ -131,39 +233,31 @@ async function run() {
           shortDescription,
           longDescription,
           imageUrl,
+          userEmail,
         } = req.body;
 
-        // Comprehensive input validation
+        // Input validation
         const validationErrors = [];
 
-        if (!name || typeof name !== "string" || name.trim().length === 0) {
+        if (!name?.trim() || typeof name !== "string") {
           validationErrors.push("Valid pet name is required");
         }
 
-        if (!age || typeof age !== "number" || age < 0) {
+        if (!Number.isInteger(age) || age < 0) {
           validationErrors.push("Valid pet age is required");
         }
 
-        if (
-          !category ||
-          typeof category !== "string" ||
-          category.trim().length === 0
-        ) {
+        if (!category?.trim() || typeof category !== "string") {
           validationErrors.push("Valid pet category is required");
         }
 
-        if (
-          !location ||
-          typeof location !== "string" ||
-          location.trim().length === 0
-        ) {
+        if (!location?.trim() || typeof location !== "string") {
           validationErrors.push("Valid pet location is required");
         }
 
         if (
-          !shortDescription ||
+          !shortDescription?.trim() ||
           typeof shortDescription !== "string" ||
-          shortDescription.trim().length === 0 ||
           shortDescription.length > 150
         ) {
           validationErrors.push(
@@ -171,20 +265,20 @@ async function run() {
           );
         }
 
-        if (
-          !longDescription ||
-          typeof longDescription !== "string" ||
-          longDescription.trim().length === 0
-        ) {
+        if (!longDescription?.trim() || typeof longDescription !== "string") {
           validationErrors.push("Valid long description is required");
         }
 
         if (
-          !imageUrl ||
+          !imageUrl?.trim() ||
           typeof imageUrl !== "string" ||
           !imageUrl.startsWith("http")
         ) {
           validationErrors.push("Valid image URL is required");
+        }
+
+        if (!userEmail?.trim() || typeof userEmail !== "string") {
+          validationErrors.push("Valid user email is required");
         }
 
         if (validationErrors.length > 0) {
@@ -194,6 +288,7 @@ async function run() {
           });
         }
 
+        // Create pet document
         const newPet = {
           name: name.trim(),
           age,
@@ -201,7 +296,8 @@ async function run() {
           location: location.trim(),
           shortDescription: shortDescription.trim(),
           longDescription: longDescription.trim(),
-          imageUrl,
+          imageUrl: imageUrl.trim(),
+          userEmail: userEmail.trim(),
           adopted: false,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -222,7 +318,7 @@ async function run() {
         });
       }
     });
-
+    // get all pets
     app.get("/pets", async (req, res) => {
       try {
         const { name, category, page = 1, limit = 9 } = req.query;
@@ -271,6 +367,7 @@ async function run() {
           .json({ message: "Failed to fetch pet", error: error.message });
       }
     });
+    // get pet by email
     app.get("/pet/me/:email", async (req, res) => {
       const { email } = req.params;
 
@@ -293,58 +390,127 @@ async function run() {
       }
     });
 
-    // Add Adoption Route
-    app.post("/adopt", async (req, res) => {
-      try {
-        const { petId, userName, userEmail, userPhone, userAddress } = req.body;
-        if (!petId || !userName || !userEmail || !userPhone || !userAddress) {
-          return res.status(400).json({ message: "All fields are required." });
-        }
-        const pet = await petCollection.findOne({ _id: new ObjectId(petId) });
+    // update pet by id
+    // app.patch("/pets/:id", async (req, res) => {
+    //   const { id } = req.params;
+    //   const updatedPet = req.body;
 
-        if (!pet) {
-          return res.status(404).json({ message: "Pet not found." });
+    //   try {
+    //     // Input validation
+    //     const validationErrors = [];
+
+    //     if (
+    //       updatedPet.name &&
+    //       (!updatedPet.name?.trim() || typeof updatedPet.name !== "string")
+    //     ) {
+    //       validationErrors.push("Valid pet name is required");
+    //     }
+
+    //     if (
+    //       updatedPet.age &&
+    //       (!Number.isInteger(updatedPet.age) || updatedPet.age < 0)
+    //     ) {
+    //       validationErrors.push("Valid pet age is required");
+    //     }
+
+    //     if (validationErrors.length > 0) {
+    //       return res.status(400).json({
+    //         message: "Validation failed",
+    //         errors: validationErrors,
+    //       });
+    //     }
+
+    //     const result = await petCollection.updateOne(
+    //       { _id: new ObjectId(id) },
+    //       {
+    //         $set: {
+    //           ...updatedPet,
+    //           updatedAt: new Date(),
+    //         },
+    //       }
+    //     );
+
+    //     if (result.matchedCount === 0) {
+    //       return res.status(404).json({ message: "Pet not found" });
+    //     }
+
+    //     if (result.modifiedCount === 0) {
+    //       return res.status(400).json({ message: "No changes made to pet" });
+    //     }
+
+    //     res.json({ message: "Pet updated successfully" });
+    //   } catch (error) {
+    //     console.error("Error updating pet:", error);
+    //     res
+    //       .status(500)
+    //       .json({ message: "Error updating pet", error: error.message });
+    //   }
+    // });
+    app.put("/pets/:id", async (req, res) => {
+      const { id } = req.params;
+      const updatedPet = req.body;
+
+      try {
+        // Ensure age is a valid number
+        if (updatedPet.age !== undefined) {
+          updatedPet.age = parseInt(updatedPet.age);
         }
-        if (pet.adopted) {
+
+        // Perform additional validation
+        const validationErrors = [];
+        if (!updatedPet.name || typeof updatedPet.name !== "string") {
+          validationErrors.push("Pet name is required and must be a string.");
+        }
+        if (
+          updatedPet.age !== undefined &&
+          (isNaN(updatedPet.age) || updatedPet.age < 0)
+        ) {
+          validationErrors.push("Age must be a non-negative number.");
+        }
+        if (!updatedPet.imageUrl || !updatedPet.imageUrl.startsWith("http")) {
+          validationErrors.push("Valid image URL is required.");
+        }
+
+        // If there are validation errors, return early
+        if (validationErrors.length > 0) {
           return res
             .status(400)
-            .json({ message: "This pet has already been adopted." });
+            .json({ message: "Validation failed", errors: validationErrors });
         }
-        // Create an adoption request
-        const adoptionRequest = {
-          petId,
-          petName: pet.name,
-          userName,
-          userEmail,
-          userPhone,
-          userAddress,
-          status: "Pending",
-          createdAt: new Date(),
-        };
 
-        // Insert adoption request into the database
-        const result = await database
-          .collection("adoptionRequests")
-          .insertOne(adoptionRequest);
-
-        // Update pet status to adopted
-        await petCollection.updateOne(
-          { _id: new ObjectId(petId) },
-          { $set: { adopted: true, updatedAt: new Date() } }
+        // Update the pet in the database
+        const result = await petCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { ...updatedPet, updatedAt: new Date() } }
         );
 
-        res.status(201).json({
-          message: "Adoption request submitted successfully.",
-          adoptionRequestId: result.insertedId,
-        });
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: "Pet not found" });
+        }
+
+        res.json({ message: "Pet updated successfully" });
       } catch (error) {
-        console.error("Error during adoption process:", error);
-        res.status(500).json({
-          message: "Failed to submit adoption request.",
-          error: error.message,
-        });
+        console.error("Error updating pet:", error);
+        res
+          .status(500)
+          .json({ message: "Error updating pet", error: error.message });
       }
     });
+
+    // delete pet by id
+    app.delete("/pets/:id", async (req, res) => {
+      const { id } = req.params;
+      try {
+        const result = await petCollection.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 0) {
+          return res.status(404).send({ message: "Pet not found" });
+        }
+        res.send({ message: "Pet deleted successfully" });
+      } catch (error) {
+        res.status(500).send({ message: "Error deleting pet", error });
+      }
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
