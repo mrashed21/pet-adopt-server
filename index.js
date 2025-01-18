@@ -64,6 +64,7 @@ async function run() {
         })
         .send({ success: true });
     });
+
     // clear json token
     app.post("/logout", async (req, res) => {
       try {
@@ -78,8 +79,10 @@ async function run() {
         return res.status(500).send({ message: "Server error" });
       }
     });
+
     // user collection
     const userCollection = database.collection("users");
+
     // add user on database
     app.post("/users/add", async (req, res) => {
       try {
@@ -119,6 +122,7 @@ async function run() {
         });
       }
     });
+
     // pet collection
     const petCollection = database.collection("pets");
 
@@ -318,6 +322,7 @@ async function run() {
         });
       }
     });
+
     // get all pets
     app.get("/pets", async (req, res) => {
       try {
@@ -367,6 +372,7 @@ async function run() {
           .json({ message: "Failed to fetch pet", error: error.message });
       }
     });
+
     // get pet by email
     app.get("/pet/me/:email", async (req, res) => {
       const { email } = req.params;
@@ -391,61 +397,6 @@ async function run() {
     });
 
     // update pet by id
-    // app.patch("/pets/:id", async (req, res) => {
-    //   const { id } = req.params;
-    //   const updatedPet = req.body;
-
-    //   try {
-    //     // Input validation
-    //     const validationErrors = [];
-
-    //     if (
-    //       updatedPet.name &&
-    //       (!updatedPet.name?.trim() || typeof updatedPet.name !== "string")
-    //     ) {
-    //       validationErrors.push("Valid pet name is required");
-    //     }
-
-    //     if (
-    //       updatedPet.age &&
-    //       (!Number.isInteger(updatedPet.age) || updatedPet.age < 0)
-    //     ) {
-    //       validationErrors.push("Valid pet age is required");
-    //     }
-
-    //     if (validationErrors.length > 0) {
-    //       return res.status(400).json({
-    //         message: "Validation failed",
-    //         errors: validationErrors,
-    //       });
-    //     }
-
-    //     const result = await petCollection.updateOne(
-    //       { _id: new ObjectId(id) },
-    //       {
-    //         $set: {
-    //           ...updatedPet,
-    //           updatedAt: new Date(),
-    //         },
-    //       }
-    //     );
-
-    //     if (result.matchedCount === 0) {
-    //       return res.status(404).json({ message: "Pet not found" });
-    //     }
-
-    //     if (result.modifiedCount === 0) {
-    //       return res.status(400).json({ message: "No changes made to pet" });
-    //     }
-
-    //     res.json({ message: "Pet updated successfully" });
-    //   } catch (error) {
-    //     console.error("Error updating pet:", error);
-    //     res
-    //       .status(500)
-    //       .json({ message: "Error updating pet", error: error.message });
-    //   }
-    // });
     app.put("/pets/:id", async (req, res) => {
       const { id } = req.params;
       const updatedPet = req.body;
@@ -508,6 +459,51 @@ async function run() {
         res.send({ message: "Pet deleted successfully" });
       } catch (error) {
         res.status(500).send({ message: "Error deleting pet", error });
+      }
+    });
+    
+    // Update pet's adopted status
+    app.patch("/pet/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { adopted } = req.body;
+
+        // Validate pet ID
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ message: "Invalid pet ID" });
+        }
+
+        // Update pet's adopted status
+        const result = await petCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              adopted: adopted,
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: "Pet not found" });
+        }
+
+        if (result.modifiedCount === 0) {
+          return res
+            .status(400)
+            .json({ message: "No changes made to pet status" });
+        }
+
+        res.json({
+          message: "Pet adoption status updated successfully",
+          adopted: adopted,
+        });
+      } catch (error) {
+        console.error("Error updating pet adoption status:", error);
+        res.status(500).json({
+          message: "Failed to update pet adoption status",
+          error: error.message,
+        });
       }
     });
 
