@@ -128,106 +128,6 @@ async function run() {
 
     // Add Pet
     app.post("/pets/add", async (req, res) => {
-      // try {
-      //   const {
-      //     name,
-      //     age,
-      //     category,
-      //     location,
-      //     shortDescription,
-      //     longDescription,
-      //     imageUrl,
-      //   } = req.body;
-
-      //   // Comprehensive input validation
-      //   const validationErrors = [];
-
-      //   if (!name || typeof name !== "string" || name.trim().length === 0) {
-      //     validationErrors.push("Valid pet name is required");
-      //   }
-
-      //   if (!age || typeof age !== "number" || age < 0) {
-      //     validationErrors.push("Valid pet age is required");
-      //   }
-
-      //   if (
-      //     !category ||
-      //     typeof category !== "string" ||
-      //     category.trim().length === 0
-      //   ) {
-      //     validationErrors.push("Valid pet category is required");
-      //   }
-
-      //   if (
-      //     !location ||
-      //     typeof location !== "string" ||
-      //     location.trim().length === 0
-      //   ) {
-      //     validationErrors.push("Valid pet location is required");
-      //   }
-
-      //   if (
-      //     !shortDescription ||
-      //     typeof shortDescription !== "string" ||
-      //     shortDescription.trim().length === 0 ||
-      //     shortDescription.length > 150
-      //   ) {
-      //     validationErrors.push(
-      //       "Valid short description is required (max 150 characters)"
-      //     );
-      //   }
-
-      //   if (
-      //     !longDescription ||
-      //     typeof longDescription !== "string" ||
-      //     longDescription.trim().length === 0
-      //   ) {
-      //     validationErrors.push("Valid long description is required");
-      //   }
-
-      //   if (
-      //     !imageUrl ||
-      //     typeof imageUrl !== "string" ||
-      //     !imageUrl.startsWith("http")
-      //   ) {
-      //     validationErrors.push("Valid image URL is required");
-      //   }
-
-      //   if (validationErrors.length > 0) {
-      //     return res.status(400).json({
-      //       message: "Validation failed",
-      //       errors: validationErrors,
-      //     });
-      //   }
-
-      //   const newPet = {
-      //     name: name.trim(),
-      //     age,
-      //     category: category.trim(),
-      //     location: location.trim(),
-      //     shortDescription: shortDescription.trim(),
-      //     longDescription: longDescription.trim(),
-      //     imageUrl,
-      //     adopted: false,
-      //     createdAt: new Date(),
-      //     updatedAt: new Date(),
-      //     userEmail,
-      //   };
-
-      //   const result = await petCollection.insertOne(newPet);
-
-      //   res.status(201).json({
-      //     message: "Pet added successfully",
-      //     petId: result.insertedId,
-      //     pet: newPet,
-      //   });
-      // } catch (error) {
-      //   console.error("Server error while adding pet:", error);
-      //   res.status(500).json({
-      //     message: "Failed to add pet",
-      //     error: error.message,
-      //   });
-      // }
       try {
         const {
           name,
@@ -239,58 +139,6 @@ async function run() {
           imageUrl,
           userEmail,
         } = req.body;
-
-        // Input validation
-        const validationErrors = [];
-
-        if (!name?.trim() || typeof name !== "string") {
-          validationErrors.push("Valid pet name is required");
-        }
-
-        if (!Number.isInteger(age) || age < 0) {
-          validationErrors.push("Valid pet age is required");
-        }
-
-        if (!category?.trim() || typeof category !== "string") {
-          validationErrors.push("Valid pet category is required");
-        }
-
-        if (!location?.trim() || typeof location !== "string") {
-          validationErrors.push("Valid pet location is required");
-        }
-
-        if (
-          !shortDescription?.trim() ||
-          typeof shortDescription !== "string" ||
-          shortDescription.length > 150
-        ) {
-          validationErrors.push(
-            "Valid short description is required (max 150 characters)"
-          );
-        }
-
-        if (!longDescription?.trim() || typeof longDescription !== "string") {
-          validationErrors.push("Valid long description is required");
-        }
-
-        if (
-          !imageUrl?.trim() ||
-          typeof imageUrl !== "string" ||
-          !imageUrl.startsWith("http")
-        ) {
-          validationErrors.push("Valid image URL is required");
-        }
-
-        if (!userEmail?.trim() || typeof userEmail !== "string") {
-          validationErrors.push("Valid user email is required");
-        }
-
-        if (validationErrors.length > 0) {
-          return res.status(400).json({
-            message: "Validation failed",
-            errors: validationErrors,
-          });
-        }
 
         // Create pet document
         const newPet = {
@@ -591,8 +439,9 @@ async function run() {
     // Add a new donation campaign
     app.post("/donations/add", async (req, res) => {
       try {
-        const { title, description, goalAmount, imageUrl, userEmail } = req.body;
-    
+        const { title, description, goalAmount, imageUrl, userEmail } =
+          req.body;
+
         const errors = [];
         if (!title?.trim() || typeof title !== "string") {
           errors.push("Valid title is required");
@@ -609,11 +458,11 @@ async function run() {
         if (typeof goalAmount !== "number" || goalAmount <= 0) {
           errors.push("Valid goal amount is required");
         }
-    
+
         if (errors.length > 0) {
           return res.status(400).json({ message: "Validation failed", errors });
         }
-    
+
         const newDonation = {
           title: title.trim(),
           description: description.trim(),
@@ -623,7 +472,7 @@ async function run() {
           raisedAmount: 0,
           createdAt: new Date(),
         };
-    
+
         const result = await donationCollection.insertOne(newDonation);
         res.status(201).json({
           message: "Donation campaign added successfully",
@@ -635,7 +484,6 @@ async function run() {
         res.status(500).json({ message: "Server error", error: error.message });
       }
     });
-    
 
     // Get all donation campaigns
     app.get("/donations", async (req, res) => {
