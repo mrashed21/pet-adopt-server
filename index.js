@@ -417,12 +417,10 @@ async function run() {
     app.get("/adoptions/:email", async (req, res) => {
       try {
         const { email } = req.params;
-        console.log(email);
         const adoptions = await adoptionCollection
           .find({ petOwnerEmail: email })
           .sort({ createdAt: -1 })
           .toArray();
-        console.log(adoptions);
         res.json(adoptions);
       } catch (error) {
         res.status(500).json({
@@ -431,16 +429,16 @@ async function run() {
         });
       }
     });
-// get adoptions by user email for send
+    // get adoptions by user email for send
     app.get("/adoptions/send/:email", async (req, res) => {
       try {
         const { email } = req.params;
-        console.log(email);
+
         const adoptions = await adoptionCollection
           .find({ adopterEmail: email })
           .sort({ createdAt: -1 })
           .toArray();
-        console.log(adoptions);
+
         res.json(adoptions);
       } catch (error) {
         res.status(500).json({
