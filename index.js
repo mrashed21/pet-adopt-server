@@ -311,45 +311,87 @@ async function run() {
     });
 
     // Update pet's adopted status
-    app.patch("/pet/:id", async (req, res) => {
+    // app.patch("/pet/:id", async (req, res) => {
+    //   try {
+    //     const { id } = req.params;
+    //     const { adopted } = req.body;
+
+    //     // Validate pet ID
+    //     if (!ObjectId.isValid(id)) {
+    //       return res.status(400).json({ message: "Invalid pet ID" });
+    //     }
+
+    //     // Update pet's adopted status
+    //     const result = await petCollection.updateOne(
+    //       { _id: new ObjectId(id) },
+    //       {
+    //         $set: {
+    //           adopted: adopted,
+    //           updatedAt: new Date(),
+    //         },
+    //       }
+    //     );
+
+    //     if (result.matchedCount === 0) {
+    //       return res.status(404).json({ message: "Pet not found" });
+    //     }
+
+    //     if (result.modifiedCount === 0) {
+    //       return res
+    //         .status(400)
+    //         .json({ message: "No changes made to pet status" });
+    //     }
+
+    //     res.json({
+    //       message: "Pet adoption status updated successfully",
+    //       adopted: adopted,
+    //     });
+    //   } catch (error) {
+    //     console.error("Error updating pet adoption status:", error);
+    //     res.status(500).json({
+    //       message: "Failed to update pet adoption status",
+    //       error: error.message,
+    //     });
+    //   }
+    // });
+    app.patch("/pets/:id", async (req, res) => {
       try {
         const { id } = req.params;
         const { adopted } = req.body;
 
-        // Validate pet ID
         if (!ObjectId.isValid(id)) {
-          return res.status(400).json({ message: "Invalid pet ID" });
+          return res.status(400).json({
+            success: false,
+            message: "Invalid pet ID",
+          });
         }
 
-        // Update pet's adopted status
         const result = await petCollection.updateOne(
           { _id: new ObjectId(id) },
           {
             $set: {
-              adopted: adopted,
+              adopted,
               updatedAt: new Date(),
             },
           }
         );
 
         if (result.matchedCount === 0) {
-          return res.status(404).json({ message: "Pet not found" });
+          return res.status(404).json({
+            success: false,
+            message: "Pet not found",
+          });
         }
 
-        if (result.modifiedCount === 0) {
-          return res
-            .status(400)
-            .json({ message: "No changes made to pet status" });
-        }
-
-        res.json({
-          message: "Pet adoption status updated successfully",
-          adopted: adopted,
+        res.status(200).json({
+          success: true,
+          message: "Pet status updated successfully",
         });
       } catch (error) {
-        console.error("Error updating pet adoption status:", error);
+        console.error("Error updating pet status:", error);
         res.status(500).json({
-          message: "Failed to update pet adoption status",
+          success: false,
+          message: "Failed to update pet status",
           error: error.message,
         });
       }
@@ -359,57 +401,110 @@ async function run() {
     const adoptionCollection = database.collection("adoptions");
 
     // Create new adoption request and update pet status
-    app.post("/adopt", async (req, res) => {
+    // app.post("/adopt", async (req, res) => {
+    //   try {
+    //     const adoptionData = {
+    //       ...req.body,
+    //       status: "pending",
+    //       createdAt: new Date(),
+    //       updatedAt: new Date(),
+    //     };
+
+    //     // Start a session for the transaction
+    //     const session = client.startSession();
+
+    //     try {
+    //       await session.withTransaction(async () => {
+    //         // Insert the adoption request
+    //         const adoptionResult = await adoptionCollection.insertOne(
+    //           adoptionData,
+    //           { session }
+    //         );
+
+    //         // Update the pet's adopted status to "pending"
+    //         const petUpdateResult = await petCollection.updateOne(
+    //           { _id: new ObjectId(adoptionData.petId) },
+    //           {
+    //             $set: {
+    //               adopted: "pending",
+    //               updatedAt: new Date(),
+    //             },
+    //           },
+    //           { session }
+    //         );
+
+    //         if (!adoptionResult.acknowledged || !petUpdateResult.acknowledged) {
+    //           throw new Error("Failed to process adoption request");
+    //         }
+    //       });
+
+    //       await session.endSession();
+    //       res.status(201).json({
+    //         success: true,
+    //         message: "Adoption request submitted successfully",
+    //       });
+    //     } catch (error) {
+    //       await session.endSession();
+    //       throw error;
+    //     }
+    //   } catch (error) {
+    //     console.error("Error processing adoption request:", error);
+    //     res.status(500).json({
+    //       success: false,
+    //       message: "Failed to process adoption request",
+    //       error: error.message,
+    //     });
+    //   }
+    // });
+    app.post("/adoptions", async (req, res) => {
       try {
+        // Add metadata to adoption request
         const adoptionData = {
           ...req.body,
-          status: "pending",
           createdAt: new Date(),
           updatedAt: new Date(),
         };
 
-        // Start a session for the transaction
-        const session = client.startSession();
+        // Validate required fields
+        const requiredFields = [
+          "petId",
+          "petName",
+          "petImage",
+          "petAge",
+          "petCategory",
+          "petLocation",
+          "adopterName",
+          "adopterEmail",
+          "phoneNumber",
+          "address",
+        ];
 
-        try {
-          await session.withTransaction(async () => {
-            // Insert the adoption request
-            const adoptionResult = await adoptionCollection.insertOne(
-              adoptionData,
-              { session }
-            );
-
-            // Update the pet's adopted status to "pending"
-            const petUpdateResult = await petCollection.updateOne(
-              { _id: new ObjectId(adoptionData.petId) },
-              {
-                $set: {
-                  adopted: "pending",
-                  updatedAt: new Date(),
-                },
-              },
-              { session }
-            );
-
-            if (!adoptionResult.acknowledged || !petUpdateResult.acknowledged) {
-              throw new Error("Failed to process adoption request");
-            }
-          });
-
-          await session.endSession();
-          res.status(201).json({
-            success: true,
-            message: "Adoption request submitted successfully",
-          });
-        } catch (error) {
-          await session.endSession();
-          throw error;
+        for (const field of requiredFields) {
+          if (!adoptionData[field]) {
+            return res.status(400).json({
+              success: false,
+              message: `Missing required field: ${field}`,
+            });
+          }
         }
+
+        // Insert into adoptions collection
+        const result = await adoptionCollection.insertOne(adoptionData);
+
+        if (!result.acknowledged) {
+          throw new Error("Failed to create adoption request");
+        }
+
+        res.status(201).json({
+          success: true,
+          message: "Adoption request submitted successfully!",
+          adoptionId: result.insertedId,
+        });
       } catch (error) {
-        console.error("Error processing adoption request:", error);
+        console.error("Error creating adoption:", error);
         res.status(500).json({
           success: false,
-          message: "Failed to process adoption request",
+          message: "Failed to submit adoption request",
           error: error.message,
         });
       }
