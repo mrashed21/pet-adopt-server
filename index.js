@@ -461,7 +461,7 @@ async function run() {
         res.status(500).send({ message: "Error deleting pet", error });
       }
     });
-    
+
     // Update pet's adopted status
     app.patch("/pet/:id", async (req, res) => {
       try {
@@ -504,6 +504,227 @@ async function run() {
           message: "Failed to update pet adoption status",
           error: error.message,
         });
+      }
+    });
+
+    // adoption collection
+    const adoptionCollection = database.collection("adoptions");
+
+    // Create new adoption request and update pet status
+    app.post("/adopt", async (req, res) => {
+      try {
+        const adoptionData = {
+          ...req.body,
+          status: "pending",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        // Start a session for the transaction
+        const session = client.startSession();
+
+        try {
+          await session.withTransaction(async () => {
+            // Insert the adoption request
+            const adoptionResult = await adoptionCollection.insertOne(
+              adoptionData,
+              { session }
+            );
+
+            // Update the pet's adopted status to "pending"
+            const petUpdateResult = await petCollection.updateOne(
+              { _id: new ObjectId(adoptionData.petId) },
+              {
+                $set: {
+                  adopted: "pending",
+                  updatedAt: new Date(),
+                },
+              },
+              { session }
+            );
+
+            if (!adoptionResult.acknowledged || !petUpdateResult.acknowledged) {
+              throw new Error("Failed to process adoption request");
+            }
+          });
+
+          await session.endSession();
+          res.status(201).json({
+            success: true,
+            message: "Adoption request submitted successfully",
+          });
+        } catch (error) {
+          await session.endSession();
+          throw error;
+        }
+      } catch (error) {
+        console.error("Error processing adoption request:", error);
+        res.status(500).json({
+          success: false,
+          message: "Failed to process adoption request",
+          error: error.message,
+        });
+      }
+    });
+
+    // Get adoptions by user email
+    app.get("/adoptions/:email", verifyToken, async (req, res) => {
+      try {
+        const { email } = req.params;
+        const adoptions = await adoptionCollection
+          .find({ email })
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.json(adoptions);
+      } catch (error) {
+        res.status(500).json({
+          message: "Error fetching adoptions",
+          error: error.message,
+        });
+      }
+    });
+
+    // donation collection
+    const donationCollection = database.collection("donations");
+
+    // Add a new donation campaign
+    app.post("/donations/add", async (req, res) => {
+      try {
+        const { title, description, goalAmount, imageUrl, userEmail } = req.body;
+    
+        const errors = [];
+        if (!title?.trim() || typeof title !== "string") {
+          errors.push("Valid title is required");
+        }
+        if (!description?.trim() || typeof description !== "string") {
+          errors.push("Valid description is required");
+        }
+        if (!imageUrl?.trim() || !imageUrl.startsWith("http")) {
+          errors.push("Valid image URL is required");
+        }
+        if (!userEmail?.trim() || typeof userEmail !== "string") {
+          errors.push("Valid user email is required");
+        }
+        if (typeof goalAmount !== "number" || goalAmount <= 0) {
+          errors.push("Valid goal amount is required");
+        }
+    
+        if (errors.length > 0) {
+          return res.status(400).json({ message: "Validation failed", errors });
+        }
+    
+        const newDonation = {
+          title: title.trim(),
+          description: description.trim(),
+          goalAmount,
+          imageUrl: imageUrl.trim(),
+          userEmail: userEmail.trim(),
+          raisedAmount: 0,
+          createdAt: new Date(),
+        };
+    
+        const result = await donationCollection.insertOne(newDonation);
+        res.status(201).json({
+          message: "Donation campaign added successfully",
+          donationId: result.insertedId,
+          donation: newDonation,
+        });
+      } catch (error) {
+        console.error("Error adding donation campaign:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
+      }
+    });
+    
+
+    // Get all donation campaigns
+    app.get("/donations", async (req, res) => {
+      try {
+        const { page = 1, limit = 10 } = req.query;
+        const donations = await donationCollection
+          .find({})
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(parseInt(limit))
+          .toArray();
+
+        const totalCount = await donationCollection.countDocuments();
+
+        res.json({ donations, totalCount });
+      } catch (error) {
+        console.error("Error fetching donations:", error);
+        res.status(500).json({ message: "Failed to fetch donations" });
+      }
+    });
+
+    // Get a specific donation campaign by ID
+    app.get("/donations/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ message: "Invalid donation ID" });
+        }
+        const donation = await donationCollection.findOne({
+          _id: new ObjectId(id),
+        });
+        if (!donation) {
+          return res
+            .status(404)
+            .json({ message: "Donation campaign not found" });
+        }
+        res.json(donation);
+      } catch (error) {
+        console.error("Error fetching donation campaign:", error);
+        res.status(500).json({ message: "Failed to fetch donation campaign" });
+      }
+    });
+
+    // Update a donation campaign by ID
+    app.put("/donations/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { title, description, goalAmount, imageUrl } = req.body;
+
+        const updates = {};
+        if (title) updates.title = title.trim();
+        if (description) updates.description = description.trim();
+        if (goalAmount) updates.goalAmount = parseFloat(goalAmount);
+        if (imageUrl) updates.imageUrl = imageUrl.trim();
+        updates.updatedAt = new Date();
+
+        const result = await donationCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updates }
+        );
+
+        if (result.matchedCount === 0) {
+          return res
+            .status(404)
+            .json({ message: "Donation campaign not found" });
+        }
+        res.json({ message: "Donation campaign updated successfully" });
+      } catch (error) {
+        console.error("Error updating donation campaign:", error);
+        res.status(500).json({ message: "Failed to update donation campaign" });
+      }
+    });
+
+    // Delete a donation campaign by ID
+    app.delete("/donations/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const result = await donationCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        if (result.deletedCount === 0) {
+          return res
+            .status(404)
+            .json({ message: "Donation campaign not found" });
+        }
+        res.json({ message: "Donation campaign deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting donation campaign:", error);
+        res.status(500).json({ message: "Failed to delete donation campaign" });
       }
     });
 
