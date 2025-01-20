@@ -5,7 +5,7 @@ require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const stripe = require("stripe")(
-  "pk_test_51Qj2fcLajU602OADcGNs4ghcmSV5jgk2t4lNpivlZG8b6eFXXuyeuc9YQe65FLQI1pv24UDNK2QIJuxWQBC21vDB00Jf55j8qO"
+  "sk_test_51Qj2fcLajU602OADcqXaEie5Zgmi0kR7CBa2uhUbRbHS0pjSwPIr6R3CbDN6xsSi9MralgL4GeUynaVHU6shtJJC00UbTTJgt3"
 );
 const app = express();
 const port = process.env.PORT || 5000;
@@ -382,120 +382,6 @@ async function run() {
       }
     });
 
-    // // donation collection
-    // const donationCollection = database.collection("donations");
-
-    // // Add a new donation campaign
-    // app.post("/donations/add", async (req, res) => {
-    //   try {
-    //     const { title, description, goalAmount, imageUrl, userEmail } =
-    //       req.body;
-    //     const newDonation = {
-    //       title: title.trim(),
-    //       description: description.trim(),
-    //       goalAmount,
-    //       imageUrl: imageUrl.trim(),
-    //       userEmail: userEmail.trim(),
-    //       raisedAmount: 0,
-    //       createdAt: new Date(),
-    //     };
-
-    //     const result = await donationCollection.insertOne(newDonation);
-    //     res.status(201).json({
-    //       message: "Donation campaign added successfully",
-    //       donationId: result.insertedId,
-    //       donation: newDonation,
-    //     });
-    //   } catch (error) {
-    //     console.error("Error adding donation campaign:", error);
-    //     res.status(500).json({ message: "Server error", error: error.message });
-    //   }
-    // });
-
-    // // Get all donation campaigns
-    // app.get("/donations", async (req, res) => {
-    //   try {
-    //     const { page = 1, limit = 10 } = req.query;
-    //     const donations = await donationCollection
-    //       .find({})
-    //       .sort({ createdAt: -1 })
-    //       .skip((page - 1) * limit)
-    //       .limit(parseInt(limit))
-    //       .toArray();
-    //     const totalCount = await donationCollection.countDocuments();
-    //     res.json({ donations, totalCount });
-    //   } catch (error) {
-    //     console.error("Error fetching donations:", error);
-    //     res.status(500).json({ message: "Failed to fetch donations" });
-    //   }
-    // });
-
-    // // Get a specific donation campaign by ID
-    // app.get("/donations/:id", async (req, res) => {
-    //   try {
-    //     const { id } = req.params;
-    //     if (!ObjectId.isValid(id)) {
-    //       return res.status(400).json({ message: "Invalid donation ID" });
-    //     }
-    //     const donation = await donationCollection.findOne({
-    //       _id: new ObjectId(id),
-    //     });
-    //     if (!donation) {
-    //       return res
-    //         .status(404)
-    //         .json({ message: "Donation campaign not found" });
-    //     }
-    //     res.json(donation);
-    //   } catch (error) {
-    //     console.error("Error fetching donation campaign:", error);
-    //     res.status(500).json({ message: "Failed to fetch donation campaign" });
-    //   }
-    // });
-
-    // // Update a donation campaign by ID
-    // app.put("/donations/:id", async (req, res) => {
-    //   try {
-    //     const { id } = req.params;
-    //     const { title, description, goalAmount, imageUrl } = req.body;
-    //     const updates = {};
-    //     if (title) updates.title = title.trim();
-    //     if (description) updates.description = description.trim();
-    //     if (goalAmount) updates.goalAmount = parseFloat(goalAmount);
-    //     if (imageUrl) updates.imageUrl = imageUrl.trim();
-    //     updates.updatedAt = new Date();
-    //     const result = await donationCollection.updateOne(
-    //       { _id: new ObjectId(id) },
-    //       { $set: updates }
-    //     );
-    //     if (result.matchedCount === 0) {
-    //       return res
-    //         .status(404)
-    //         .json({ message: "Donation campaign not found" });
-    //     }
-    //     res.json({ message: "Donation campaign updated successfully" });
-    //   } catch (error) {
-    //     console.error("Error updating donation campaign:", error);
-    //     res.status(500).json({ message: "Failed to update donation campaign" });
-    //   }
-    // });
-
-    // //  get dontion by user email
-    // app.get("/donations/user/:email", async (req, res) => {
-    //   try {
-    //     const { email } = req.params;
-    //     const donations = await donationCollection
-    //       .find({ userEmail: email })
-    //       .sort({ createdAt: -1 })
-    //       .toArray();
-    //     res.json(donations);
-    //   } catch (error) {
-    //     res.status(500).json({
-    //       message: "Error fetching donations",
-    //       error: error.message,
-    //     });
-    //   }
-    // });
-
     // Donation collection
     const donationCollection = database.collection("donations");
 
@@ -670,15 +556,97 @@ async function run() {
         res.status(500).json({ message: "Failed to fetch donators" });
       }
     });
+    // -----------------------------
+    
+    app.post("/donations/:id/donate", async (req, res) => {
+      const { amount, paymentMethodId } = req.body;
+      const { id } = req.params;
+
+      try {
+        // Create the PaymentIntent
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: Math.round(amount * 100), // Amount in cents
+          currency: "usd",
+          payment_method: paymentMethodId,
+          confirm: true,
+          automatic_payment_methods: {
+            enabled: true,
+            allow_redirects: "never", // Avoid redirect-based payment methods
+          },
+          metadata: {
+            donationId: id, // Add metadata for tracking
+          },
+        });
+
+        // Update the raisedAmount for the donation campaign
+        const result = await donationCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $inc: { raisedAmount: amount }, // Increment the raisedAmount by the donation amount
+            $push: {
+              donators: {
+                amount,
+                paymentMethodId,
+                donatedAt: new Date(),
+              }, // Optional: Track individual donations
+            },
+          }
+        );
+
+        if (result.matchedCount === 0) {
+          return res
+            .status(404)
+            .json({ message: "Donation campaign not found" });
+        }
+
+        res.status(200).json({
+          success: true,
+          clientSecret: paymentIntent.client_secret,
+          message: "Donation successful, raised amount updated",
+        });
+      } catch (error) {
+        console.error("Error processing donation:", error);
+        res.status(400).json({ success: false, message: error.message });
+      }
+    });
+
+    
+    app.get("/donations/recommended/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+    
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ message: "Invalid donation ID" });
+        }
+    
+        // Exclude the current donation and fetch 3 random active campaigns
+        const campaigns = await donationCollection
+          .aggregate([
+            { $match: { _id: { $ne: new ObjectId(id) }, paused: false } },
+            { $sample: { size: 3 } }, // Select 3 random documents
+          ])
+          .toArray();
+    
+        if (!campaigns.length) {
+          return res
+            .status(404)
+            .json({ message: "No recommended campaigns found" });
+        }
+    
+        res.json(campaigns);
+      } catch (error) {
+        console.error("Error fetching recommended donations:", error);
+        res.status(500).json({ message: "Failed to fetch recommended donations" });
+      }
+    });
+    
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
   } catch (error) {
     console.error("Failed to connect to MongoDB", error);
-  } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
   }
 }
 
