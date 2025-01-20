@@ -303,6 +303,48 @@ async function run() {
       }
     });
 
+    // Update pet adoption status reject
+    app.patch("/pet-reject/:id", async (req, res) => {
+      const { id } = req.params; // Extract ID from params
+      const { adopted } = req.body; // Extract `adopted` status from the request body
+
+      // Validate `adopted` field
+      if (typeof adopted !== "boolean") {
+        return res
+          .status(400)
+          .json({ message: "Invalid 'adopted' value. Must be a boolean." });
+      }
+
+      // Validate ObjectId format
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid pet ID format." });
+      }
+
+      try {
+        const petId = new ObjectId(id); // Convert string to ObjectId
+
+        // Update pet's adopted status
+        const result = await petCollection.updateOne(
+          { _id: petId }, // Match by ID
+          { $set: { adopted, updatedAt: new Date() } } // Update adopted and timestamp
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: "Pet not found." });
+        }
+
+        res
+          .status(200)
+          .json({ message: "Pet adoption status updated successfully." });
+      } catch (error) {
+        console.error("Error updating pet status:", error); // Log the exact error
+        res.status(500).json({
+          message: "Failed to update pet status.",
+          error: error.message,
+        });
+      }
+    });
+
     // adoption collection
     const adoptionCollection = database.collection("adoptions");
 
@@ -377,6 +419,31 @@ async function run() {
         console.error("Error deleting adoption:", error);
         res.status(500).json({
           message: "Error deleting adoption",
+          error: error.message,
+        });
+      }
+    });
+    // Update adoption request by id
+    app.patch("/adoptions/:id", async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid adoption ID format." });
+      }
+      try {
+        const result = await adoptionCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status, updatedAt: new Date() } }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: "Adoption not found" });
+        }
+        res.json({ message: "Adoption status updated successfully" });
+      } catch (error) {
+        console.error("Error updating adoption status:", error);
+        res.status(500).json({
+          message: "Failed to update adoption status",
           error: error.message,
         });
       }
@@ -556,8 +623,9 @@ async function run() {
         res.status(500).json({ message: "Failed to fetch donators" });
       }
     });
+
     // -----------------------------
-    
+
     app.post("/donations/:id/donate", async (req, res) => {
       const { amount, paymentMethodId } = req.body;
       const { id } = req.params;
@@ -610,15 +678,14 @@ async function run() {
       }
     });
 
-    
     app.get("/donations/recommended/:id", async (req, res) => {
       try {
         const { id } = req.params;
-    
+
         if (!ObjectId.isValid(id)) {
           return res.status(400).json({ message: "Invalid donation ID" });
         }
-    
+
         // Exclude the current donation and fetch 3 random active campaigns
         const campaigns = await donationCollection
           .aggregate([
@@ -626,20 +693,21 @@ async function run() {
             { $sample: { size: 3 } }, // Select 3 random documents
           ])
           .toArray();
-    
+
         if (!campaigns.length) {
           return res
             .status(404)
             .json({ message: "No recommended campaigns found" });
         }
-    
+
         res.json(campaigns);
       } catch (error) {
         console.error("Error fetching recommended donations:", error);
-        res.status(500).json({ message: "Failed to fetch recommended donations" });
+        res
+          .status(500)
+          .json({ message: "Failed to fetch recommended donations" });
       }
     });
-    
 
     await client.db("admin").command({ ping: 1 });
     console.log(
