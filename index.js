@@ -4,20 +4,19 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
-const stripe = require("stripe")(
-  "sk_test_51Qj2fcLajU602OADcqXaEie5Zgmi0kR7CBa2uhUbRbHS0pjSwPIr6R3CbDN6xsSi9MralgL4GeUynaVHU6shtJJC00UbTTJgt3"
-);
+const stripe = require("stripe")(`${process.env.STRIPE_SECRET_KEY}`);
 const app = express();
 const port = process.env.PORT || 5000;
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: [`${process.env.Origin}`],
     credentials: true,
     optionalSuccessStatus: 200,
   })
 );
 app.use(express.json());
 app.use(cookieParser());
+console.log(process.env.STRIPE_SECRET_KEY);
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.cjfhp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 const client = new MongoClient(uri, {
   serverApi: {
@@ -305,34 +304,25 @@ async function run() {
 
     // Update pet adoption status reject
     app.patch("/pet-reject/:id", async (req, res) => {
-      const { id } = req.params; // Extract ID from params
-      const { adopted } = req.body; // Extract `adopted` status from the request body
-
-      // Validate `adopted` field
+      const { id } = req.params; 
+      const { adopted } = req.body;
       if (typeof adopted !== "boolean") {
         return res
           .status(400)
           .json({ message: "Invalid 'adopted' value. Must be a boolean." });
       }
-
-      // Validate ObjectId format
       if (!ObjectId.isValid(id)) {
         return res.status(400).json({ message: "Invalid pet ID format." });
       }
-
       try {
-        const petId = new ObjectId(id); // Convert string to ObjectId
-
-        // Update pet's adopted status
+        const petId = new ObjectId(id); 
         const result = await petCollection.updateOne(
-          { _id: petId }, // Match by ID
-          { $set: { adopted, updatedAt: new Date() } } // Update adopted and timestamp
+          { _id: petId },
+          { $set: { adopted, updatedAt: new Date() } }
         );
-
         if (result.matchedCount === 0) {
           return res.status(404).json({ message: "Pet not found." });
         }
-
         res
           .status(200)
           .json({ message: "Pet adoption status updated successfully." });
@@ -455,17 +445,18 @@ async function run() {
     // Add a new donation campaign
     app.post("/donations/add", async (req, res) => {
       try {
-        const { title, description, goalAmount, imageUrl, userEmail } =
+        const { title, shortDescription,longDescription, goalAmount, imageUrl, userEmail } =
           req.body;
         const newDonation = {
           title: title.trim(),
-          description: description.trim(),
+          shortDescription: shortDescription.trim(),
+          longDescription: longDescription.trim(),
           goalAmount,
           imageUrl: imageUrl.trim(),
           userEmail: userEmail.trim(),
           raisedAmount: 0,
-          paused: false, // Default to not paused
-          donators: [], // Track individual donations
+          paused: false,
+          donators: [],
           createdAt: new Date(),
         };
 
@@ -571,22 +562,18 @@ async function run() {
       try {
         const { id } = req.params;
         const { paused } = req.body;
-
         if (!ObjectId.isValid(id)) {
           return res.status(400).json({ message: "Invalid donation ID" });
         }
-
         const result = await donationCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { paused } }
         );
-
         if (result.matchedCount === 0) {
           return res
             .status(404)
             .json({ message: "Donation campaign not found" });
         }
-
         res.json({
           message: `Donation campaign ${
             paused ? "paused" : "unpaused"
@@ -602,21 +589,17 @@ async function run() {
     app.get("/donations/donators/:id", async (req, res) => {
       try {
         const { id } = req.params;
-
         if (!ObjectId.isValid(id)) {
           return res.status(400).json({ message: "Invalid donation ID" });
         }
-
         const donation = await donationCollection.findOne({
           _id: new ObjectId(id),
         });
-
         if (!donation) {
           return res
             .status(404)
             .json({ message: "Donation campaign not found" });
         }
-
         res.json(donation.donators || []);
       } catch (error) {
         console.error("Error fetching donators:", error);
@@ -629,7 +612,6 @@ async function run() {
     app.post("/donations/:id/donate", async (req, res) => {
       const { amount, paymentMethodId, donorEmail, donorName } = req.body;
       const { id } = req.params;
-
       if (!amount || amount <= 0) {
         return res.status(400).json({ message: "Invalid donation amount" });
       }
@@ -669,13 +651,11 @@ async function run() {
             },
           }
         );
-
         if (result.matchedCount === 0) {
           return res
             .status(404)
             .json({ success: false, message: "Donation campaign not found" });
         }
-
         res.status(200).json({
           success: true,
           clientSecret: paymentIntent.client_secret,
