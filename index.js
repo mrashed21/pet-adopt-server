@@ -627,36 +627,45 @@ async function run() {
     // -----------------------------
 
     app.post("/donations/:id/donate", async (req, res) => {
-      const { amount, paymentMethodId } = req.body;
+      const { amount, paymentMethodId, donorEmail, donorName } = req.body;
       const { id } = req.params;
 
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ message: "Invalid donation amount" });
+      }
+      if (!paymentMethodId) {
+        return res
+          .status(400)
+          .json({ message: "Payment method ID is required" });
+      }
       try {
-        // Create the PaymentIntent
         const paymentIntent = await stripe.paymentIntents.create({
-          amount: Math.round(amount * 100), // Amount in cents
+          amount: Math.round(amount * 100),
           currency: "usd",
           payment_method: paymentMethodId,
           confirm: true,
           automatic_payment_methods: {
             enabled: true,
-            allow_redirects: "never", // Avoid redirect-based payment methods
+            allow_redirects: "never",
           },
           metadata: {
-            donationId: id, // Add metadata for tracking
+            donationId: id,
+            donorEmail,
+            donorName,
           },
         });
-
-        // Update the raisedAmount for the donation campaign
         const result = await donationCollection.updateOne(
           { _id: new ObjectId(id) },
           {
-            $inc: { raisedAmount: amount }, // Increment the raisedAmount by the donation amount
+            $inc: { raisedAmount: amount },
             $push: {
               donators: {
+                email: donorEmail,
+                name: donorName,
                 amount,
                 paymentMethodId,
                 donatedAt: new Date(),
-              }, // Optional: Track individual donations
+              },
             },
           }
         );
@@ -664,7 +673,7 @@ async function run() {
         if (result.matchedCount === 0) {
           return res
             .status(404)
-            .json({ message: "Donation campaign not found" });
+            .json({ success: false, message: "Donation campaign not found" });
         }
 
         res.status(200).json({
@@ -674,32 +683,30 @@ async function run() {
         });
       } catch (error) {
         console.error("Error processing donation:", error);
-        res.status(400).json({ success: false, message: error.message });
+        res.status(400).json({
+          success: false,
+          message: error.message || "Failed to process donation",
+        });
       }
     });
 
     app.get("/donations/recommended/:id", async (req, res) => {
       try {
         const { id } = req.params;
-
         if (!ObjectId.isValid(id)) {
           return res.status(400).json({ message: "Invalid donation ID" });
         }
-
-        // Exclude the current donation and fetch 3 random active campaigns
         const campaigns = await donationCollection
           .aggregate([
             { $match: { _id: { $ne: new ObjectId(id) }, paused: false } },
-            { $sample: { size: 3 } }, // Select 3 random documents
+            { $sample: { size: 3 } },
           ])
           .toArray();
-
         if (!campaigns.length) {
           return res
             .status(404)
             .json({ message: "No recommended campaigns found" });
         }
-
         res.json(campaigns);
       } catch (error) {
         console.error("Error fetching recommended donations:", error);
