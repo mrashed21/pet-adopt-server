@@ -452,6 +452,7 @@ async function run() {
           goalAmount,
           imageUrl,
           userEmail,
+          lastDate,
         } = req.body;
         const newDonation = {
           title: title.trim(),
@@ -464,6 +465,7 @@ async function run() {
           paused: false,
           donators: [],
           createdAt: new Date(),
+          lastDate: lastDate.trim(),
         };
 
         const result = await donationCollection.insertOne(newDonation);
@@ -817,3 +819,4 @@ app.get("/", (req, res) => {
 app.listen(port, () => {
   console.log(`Server is running on PORT ${port}`);
 });
+
