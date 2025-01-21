@@ -304,7 +304,7 @@ async function run() {
 
     // Update pet adoption status reject
     app.patch("/pet-reject/:id", async (req, res) => {
-      const { id } = req.params; 
+      const { id } = req.params;
       const { adopted } = req.body;
       if (typeof adopted !== "boolean") {
         return res
@@ -315,7 +315,7 @@ async function run() {
         return res.status(400).json({ message: "Invalid pet ID format." });
       }
       try {
-        const petId = new ObjectId(id); 
+        const petId = new ObjectId(id);
         const result = await petCollection.updateOne(
           { _id: petId },
           { $set: { adopted, updatedAt: new Date() } }
@@ -445,8 +445,14 @@ async function run() {
     // Add a new donation campaign
     app.post("/donations/add", async (req, res) => {
       try {
-        const { title, shortDescription,longDescription, goalAmount, imageUrl, userEmail } =
-          req.body;
+        const {
+          title,
+          shortDescription,
+          longDescription,
+          goalAmount,
+          imageUrl,
+          userEmail,
+        } = req.body;
         const newDonation = {
           title: title.trim(),
           shortDescription: shortDescription.trim(),
@@ -512,31 +518,66 @@ async function run() {
       }
     });
 
-    // Update a donation campaign by ID
-    app.put("/donations/:id", async (req, res) => {
+    app.patch("/donations/update/:id", async (req, res) => {
       try {
         const { id } = req.params;
-        const { title, description, goalAmount, imageUrl } = req.body;
-        const updates = {};
-        if (title) updates.title = title.trim();
-        if (description) updates.description = description.trim();
-        if (goalAmount) updates.goalAmount = parseFloat(goalAmount);
-        if (imageUrl) updates.imageUrl = imageUrl.trim();
-        updates.updatedAt = new Date();
+        const {
+          title,
+          shortDescription,
+          longDescription,
+          goalAmount,
+          imageUrl,
+          lastDate,
+          updatedAt,
+        } = req.body;
+
+        // Validate ObjectId
+        if (!ObjectId.isValid(id)) {
+          return res
+            .status(400)
+            .json({ message: "Invalid donation ID format" });
+        }
+
+        // Get existing donation
+        const existingDonation = await donationCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!existingDonation) {
+          return res
+            .status(404)
+            .json({ message: "Donation campaign not found" });
+        }
+
+        // Create update object
+        const updateData = {
+          title: title.trim(),
+          shortDescription: shortDescription.trim(),
+          longDescription: longDescription.trim(),
+          goalAmount: Number(goalAmount),
+          imageUrl: imageUrl.trim(),
+          lastDate,
+          updatedAt,
+        };
 
         const result = await donationCollection.updateOne(
           { _id: new ObjectId(id) },
-          { $set: updates }
+          { $set: updateData }
         );
+
         if (result.matchedCount === 0) {
           return res
             .status(404)
             .json({ message: "Donation campaign not found" });
         }
-        res.json({ message: "Donation campaign updated successfully" });
+
+        res.json({
+          message: "Donation campaign updated successfully",
+          donation: { ...existingDonation, ...updateData },
+        });
       } catch (error) {
         console.error("Error updating donation campaign:", error);
-        res.status(500).json({ message: "Failed to update donation campaign" });
+        res.status(500).json({ message: "Server error", error: error.message });
       }
     });
 
@@ -606,7 +647,69 @@ async function run() {
         res.status(500).json({ message: "Failed to fetch donators" });
       }
     });
+    // Get donations where user has donated
+    app.get("/my-donations/:email", async (req, res) => {
+      try {
+        const { email } = req.params;
 
+        const donations = await donationCollection
+          .find({
+            "donators.email": email,
+          })
+          .toArray();
+
+        res.json(donations);
+      } catch (error) {
+        console.error("Error fetching user donations:", error);
+        res.status(500).json({
+          message: "Failed to fetch donations",
+          error: error.message,
+        });
+      }
+    });
+
+    // Process refund request
+    app.post("/donations/refund/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { userEmail, amount } = req.body;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ message: "Invalid donation ID" });
+        }
+
+        // Find the donation campaign
+        const donation = await donationCollection.findOne({
+          _id: new ObjectId(id),
+          "donators.email": userEmail,
+        });
+
+        if (!donation) {
+          return res.status(404).json({ message: "Donation not found" });
+        }
+
+        // Remove the donation from the campaign
+        const result = await donationCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $pull: { donators: { email: userEmail } },
+            $inc: { raisedAmount: -amount },
+          }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res.status(400).json({ message: "Failed to process refund" });
+        }
+
+        res.json({ message: "Refund processed successfully" });
+      } catch (error) {
+        console.error("Error processing refund:", error);
+        res.status(500).json({
+          message: "Server error",
+          error: error.message,
+        });
+      }
+    });
     // -----------------------------
 
     app.post("/donations/:id/donate", async (req, res) => {
