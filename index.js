@@ -82,6 +82,9 @@ async function run() {
           email: user.email,
         });
         if (existingUser) {
+          return res.status(400).send({ message: "Email already exists" });
+        }
+        if (!existingUser) {
           await userCollection.updateOne(
             { email: user.email },
             {
@@ -109,12 +112,28 @@ async function run() {
         });
       }
     });
+    // get user by email
+    app.get("/users/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const user = await userCollection.findOne({ email });
+        if (user) {
+          res.status(200).send({ role: user.role });
+        } else {
+          res.status(404).send({ message: "User not found" });
+        }
+      } catch (error) {
+        res
+          .status(500)
+          .send({ message: "Error fetching user role", error: error.message });
+      }
+    });
 
     // pet collection
     const petCollection = database.collection("pets");
 
     // Add Pet
-    app.post("/pets/add", async (req, res) => {
+    app.post("/pets/add", verifyToken, async (req, res) => {
       try {
         const {
           name,
@@ -182,7 +201,15 @@ async function run() {
         res.status(500).json({ message: "Failed to fetch pets", error });
       }
     });
-
+    // get all pets
+    app.get("/admin/pets", async (req, res) => {
+      try {
+        const pet = await petCollection.find({}).toArray();
+        res.json(pet);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
     // get pet by id
     app.get("/pets/:id", async (req, res) => {
       try {
@@ -226,7 +253,7 @@ async function run() {
     });
 
     // update pet by id
-    app.put("/pets/:id", async (req, res) => {
+    app.put("/pets/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const updatedPet = req.body;
       try {
@@ -801,6 +828,53 @@ async function run() {
       }
     });
 
+    // for admin
+    //  Get All Users
+    app.get("/admin/users", async (req, res) => {
+      try {
+        const users = await userCollection.find({}).toArray();
+        res.json(users);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Make User Admin
+    app.put("/admin/users/:id", async (req, res) => {
+      try {
+        const userId = req.params.id;
+        const { role } = req.body;
+        const filter = { _id: new ObjectId(userId) };
+        const update = { $set: { role } };
+        const result = await userCollection.updateOne(filter, update);
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ error: "User not found" });
+        }
+        res.json({
+          message: role === "admin" ? "User made admin" : "Admin role removed",
+          modifiedCount: result.modifiedCount,
+        });
+      } catch (error) {
+        console.error("Error updating user role:", error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+    // all donation
+
+    app.get("/admin/donation", async (req, res) => {
+      try {
+        const donations = await donationCollection
+          .find()
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.json(donations);
+      } catch (error) {
+        res.status(500).json({
+          message: "Error fetching donations",
+          error: error.message,
+        });
+      }
+    });
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
@@ -819,4 +893,3 @@ app.get("/", (req, res) => {
 app.listen(port, () => {
   console.log(`Server is running on PORT ${port}`);
 });
-
