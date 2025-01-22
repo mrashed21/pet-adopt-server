@@ -7,16 +7,45 @@ const cookieParser = require("cookie-parser");
 const stripe = require("stripe")(`${process.env.STRIPE_SECRET_KEY}`);
 const app = express();
 const port = process.env.PORT || 5000;
-app.use(
-  cors({
-    origin: [`${process.env.Origin}`],
-    credentials: true,
-    optionalSuccessStatus: 200,
-  })
-);
+
+const corsOptions = {
+  origin: ["http://localhost:5173", "http://localhost:5174"],
+  credentials: true,
+  optionSuccessStatus: 200,
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
-console.log(process.env.STRIPE_SECRET_KEY);
+// const verifyToken = (req, res, next) => {
+
+//   const token = req.cookies.token;
+//   console.log(token);
+//   if (!token) {
+//     return res.status(401).send({ message: "unauthorized access" });
+//   }
+//   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+//     if (err) {
+//       return res.status(401).send({ message: "unauthorized access" });
+//     }
+//     req.user = decoded;
+//     next();
+//   });
+// };
+
+// verify token
+const verifyToken = (req, res, next) => {
+  if (!req.headers.authorization) {
+    return res.status(401).send({ message: "forbidden! No token provided." });
+  }
+  const token = req.headers.authorization.split(" ")[1];
+  console.log(token);
+  jwt.verify(token, process.env.JWT_SECRET, (error, decoded) => {
+    if (error) return res.status(403).send({ message: "Token is not valid." });
+    req.decoded = decoded;
+    console.log("this is email", req.decoded);
+    next();
+  });
+};
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.cjfhp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 const client = new MongoClient(uri, {
   serverApi: {
@@ -25,92 +54,38 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
-const verifyToken = (req, res, next) => {
-  const token = req.cookies?.token;
-  if (!token) {
-    return res.status(401).send({ message: "unauthorized access" });
-  }
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(401).send({ message: "unauthorized access" });
-    }
-    req.user = decoded;
-    next();
-  });
-};
 
 async function run() {
   try {
     const database = client.db("petAdoptDB");
     // genarate json token
-    app.post("/jwt", async (req, res) => {
-      const email = req.body;
-      const token = jwt.sign(email, process.env.JWT_SECRET, {
-        expiresIn: "365d",
-      });
-      res
-        .cookie("token", token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
-        })
-        .send({ success: true });
-    });
 
-    // clear json token
-    app.post("/logout", async (req, res) => {
-      try {
-        res.clearCookie("token", {
-          maxAge: 0,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
-        });
-        return res.status(200).send({ success: true });
-      } catch (error) {
-        return res.status(500).send({ message: "Server error" });
-      }
+    // jwt releted api
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.JWT_SECRET, {
+        expiresIn: "9h",
+      });
+      res.send({ token });
     });
 
     // user collection
     const userCollection = database.collection("users");
 
-    // add user on database
-    app.post("/users/add", async (req, res) => {
-      try {
-        const user = req.body;
-        const existingUser = await userCollection.findOne({
-          email: user.email,
-        });
-        if (existingUser) {
-          return res.status(400).send({ message: "Email already exists" });
-        }
-        if (!existingUser) {
-          await userCollection.updateOne(
-            { email: user.email },
-            {
-              $set: {
-                name: user.name,
-                photoURL: user.photoURL,
-                role: user.role || "user",
-                updatedAt: new Date(),
-              },
-            }
-          );
-          return res.status(200).send({ message: "User information updated" });
-        }
-        const newUser = {
-          ...user,
-          role: user.role || "user",
-          createdAt: new Date(),
-        };
-        const result = await userCollection.insertOne(newUser);
-        res.status(201).send({ message: "User added successfully", result });
-      } catch (error) {
-        res.status(500).send({
-          message: "Error processing user data",
-          error: error.message,
-        });
+    // save  a user in db
+    app.post("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = req.body;
+      // check if user exists in db
+      const isExist = await userCollection.findOne({ email: email });
+      if (isExist) {
+        return res.send(isExist);
       }
+      const result = await userCollection.insertOne({
+        ...user,
+        role: "user",
+      });
+      res.send(result);
     });
     // get user by email
     app.get("/users/:email", async (req, res) => {
@@ -201,15 +176,7 @@ async function run() {
         res.status(500).json({ message: "Failed to fetch pets", error });
       }
     });
-    // get all pets
-    app.get("/admin/pets", async (req, res) => {
-      try {
-        const pet = await petCollection.find({}).toArray();
-        res.json(pet);
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-    });
+
     // get pet by id
     app.get("/pets/:id", async (req, res) => {
       try {
@@ -232,7 +199,7 @@ async function run() {
     });
 
     // get pet by email
-    app.get("/pet/me/:email", async (req, res) => {
+    app.get("/pet/me/:email", verifyToken, async (req, res) => {
       const { email } = req.params;
       if (!email) {
         return res.status(400).send({ message: "Email is required" });
@@ -274,7 +241,7 @@ async function run() {
     });
 
     // delete pet by id
-    app.delete("/pets/:id", async (req, res) => {
+    app.delete("/pets/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       try {
         const result = await petCollection.deleteOne({ _id: new ObjectId(id) });
@@ -288,7 +255,7 @@ async function run() {
     });
 
     // Update pet's adopted status
-    app.patch("/pets/:id", async (req, res) => {
+    app.patch("/pets/:id", verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
         const { adopted } = req.body;
@@ -330,7 +297,7 @@ async function run() {
     });
 
     // Update pet adoption status reject
-    app.patch("/pet-reject/:id", async (req, res) => {
+    app.patch("/pet-reject/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const { adopted } = req.body;
       if (typeof adopted !== "boolean") {
@@ -390,7 +357,7 @@ async function run() {
     });
 
     // Get adoptions by user email for receive
-    app.get("/adoptions/:email", async (req, res) => {
+    app.get("/adoptions/:email", verifyToken, async (req, res) => {
       try {
         const { email } = req.params;
         const adoptions = await adoptionCollection
@@ -406,7 +373,7 @@ async function run() {
       }
     });
     // get adoptions by user email for send
-    app.get("/adoptions/send/:email", async (req, res) => {
+    app.get("/adoptions/send/:email", verifyToken, async (req, res) => {
       try {
         const { email } = req.params;
         const adoptions = await adoptionCollection
@@ -422,7 +389,7 @@ async function run() {
       }
     });
     // delete by id
-    app.delete("/adoptions/:id", async (req, res) => {
+    app.delete("/adoptions/:id", verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
         const result = await adoptionCollection.deleteOne({
@@ -441,7 +408,7 @@ async function run() {
       }
     });
     // Update adoption request by id
-    app.patch("/adoptions/:id", async (req, res) => {
+    app.patch("/adoptions/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const { status } = req.body;
       if (!ObjectId.isValid(id)) {
@@ -470,7 +437,7 @@ async function run() {
     const donationCollection = database.collection("donations");
 
     // Add a new donation campaign
-    app.post("/donations/add", async (req, res) => {
+    app.post("/donations/add", verifyToken, async (req, res) => {
       try {
         const {
           title,
@@ -547,7 +514,7 @@ async function run() {
       }
     });
 
-    app.patch("/donations/update/:id", async (req, res) => {
+    app.patch("/donations/update/:id", verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
         const {
@@ -611,7 +578,7 @@ async function run() {
     });
 
     // Get donations by user email
-    app.get("/donations/user/:email", async (req, res) => {
+    app.get("/donations/user/:email", verifyToken, async (req, res) => {
       try {
         const { email } = req.params;
         const donations = await donationCollection
@@ -628,7 +595,7 @@ async function run() {
     });
 
     // Pause or unpause a donation campaign
-    app.patch("/donations/pause/:id", async (req, res) => {
+    app.patch("/donations/pause/:id", verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
         const { paused } = req.body;
@@ -677,10 +644,10 @@ async function run() {
       }
     });
     // Get donations where user has donated
-    app.get("/my-donations/:email", async (req, res) => {
+    app.get("/my-donations/:email", verifyToken, async (req, res) => {
       try {
         const { email } = req.params;
-
+        console.log(email);
         const donations = await donationCollection
           .find({
             "donators.email": email,
@@ -698,7 +665,7 @@ async function run() {
     });
 
     // Process refund request
-    app.post("/donations/refund/:id", async (req, res) => {
+    app.post("/donations/refund/:id", verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
         const { userEmail, amount } = req.body;
@@ -741,7 +708,7 @@ async function run() {
     });
     // -----------------------------
 
-    app.post("/donations/:id/donate", async (req, res) => {
+    app.post("/donations/:id/donate", verifyToken, async (req, res) => {
       const { amount, paymentMethodId, donorEmail, donorName } = req.body;
       const { id } = req.params;
       if (!amount || amount <= 0) {
@@ -828,9 +795,32 @@ async function run() {
       }
     });
 
+    // Middleware for admin verification
+    const verifyAdmin = async (req, res, next) => {
+      try {
+        const email = req.decoded.email;
+        console.log("dd", req);
+        const user = await userCollection.findOne({ email });
+        console.log(user);
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
+        if (user.role !== "admin") {
+          return res
+            .status(403)
+            .send({ message: "Access denied! Admin only." });
+        }
+        next();
+      } catch (error) {
+        res
+          .status(500)
+          .send({ message: "Internal server error", error: error.message });
+      }
+    };
+
     // for admin
     //  Get All Users
-    app.get("/admin/users", async (req, res) => {
+    app.get("/admin/users", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const users = await userCollection.find({}).toArray();
         res.json(users);
@@ -840,7 +830,7 @@ async function run() {
     });
 
     // Make User Admin
-    app.put("/admin/users/:id", async (req, res) => {
+    app.put("/admin/users/:id", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const userId = req.params.id;
         const { role } = req.body;
@@ -859,9 +849,18 @@ async function run() {
         res.status(500).json({ error: error.message });
       }
     });
+    // get all pets
+    app.get("/admin/pets", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const pet = await petCollection.find({}).toArray();
+        res.json(pet);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
     // all donation
 
-    app.get("/admin/donation", async (req, res) => {
+    app.get("/admin/donation", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const donations = await donationCollection
           .find()
@@ -875,6 +874,34 @@ async function run() {
         });
       }
     });
+    // delete donation by id
+    app.delete(
+      "/admin/donations/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+          if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid donation ID" });
+          }
+          const result = await donationCollection.deleteOne({
+            _id: new ObjectId(id),
+          });
+          if (result.deletedCount === 0) {
+            return res.status(404).json({ message: "Donation not found" });
+          }
+          res.json({ message: "Donation deleted successfully" });
+        } catch (error) {
+          console.error("Error deleting donation:", error);
+          res.status(500).json({
+            message: "Failed to delete donation",
+            error: error.message,
+          });
+        }
+      }
+    );
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
