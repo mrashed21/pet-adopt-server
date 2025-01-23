@@ -42,11 +42,9 @@ const verifyToken = (req, res, next) => {
     return res.status(401).send({ message: "forbidden! No token provided." });
   }
   const token = req.headers.authorization.split(" ")[1];
-  console.log(token);
   jwt.verify(token, process.env.JWT_SECRET, (error, decoded) => {
     if (error) return res.status(403).send({ message: "Token is not valid." });
     req.decoded = decoded;
-    console.log("this is email", req.decoded);
     next();
   });
 };
@@ -651,7 +649,6 @@ async function run() {
     app.get("/my-donations/:email", verifyToken, async (req, res) => {
       try {
         const { email } = req.params;
-        console.log(email);
         const donations = await donationCollection
           .find({
             "donators.email": email,
@@ -803,9 +800,7 @@ async function run() {
     const verifyAdmin = async (req, res, next) => {
       try {
         const email = req.decoded.email;
-        console.log("dd", req);
         const user = await userCollection.findOne({ email });
-        console.log(user);
         if (!user) {
           return res.status(404).send({ message: "User not found" });
         }
