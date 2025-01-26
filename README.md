@@ -45,7 +45,7 @@ Ensure you have the following installed:
 ### Steps
 1. Clone the repository:
    ```bash
-   git clone <https://github.com/mrashed21/pet-adopt-server>
+   git clone https://github.com/mrashed21/pet-adopt-server
    cd pet-adoption-backend
    ```
 
