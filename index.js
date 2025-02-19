@@ -20,21 +20,6 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
-// const verifyToken = (req, res, next) => {
-
-//   const token = req.cookies.token;
-//   console.log(token);
-//   if (!token) {
-//     return res.status(401).send({ message: "unauthorized access" });
-//   }
-//   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-//     if (err) {
-//       return res.status(401).send({ message: "unauthorized access" });
-//     }
-//     req.user = decoded;
-//     next();
-//   });
-// };
 
 // verify token
 const verifyToken = (req, res, next) => {
@@ -793,6 +778,26 @@ async function run() {
         res
           .status(500)
           .json({ message: "Failed to fetch recommended donations" });
+      }
+    });
+
+    // for newsletter
+    const newsletterCollection = database.collection("newsletter");
+    app.post("/newsletter", async (req, res) => {
+      try {
+        const { email } = req.body;
+        if (!email) {
+          return res.status(400).json({ message: "Email is required" });
+        }
+        const existingUser = await newsletterCollection.findOne({ email });
+        if (existingUser) {
+          return res.status(400).json({ message: "Email already exists" });
+        }
+        await newsletterCollection.insertOne({ email });
+        res.json({ message: "Email added to newsletter successfully" });
+      } catch (error) {
+        console.error("Error adding newsletter email:", error);
+        res.status(500).json({ message: "Failed to add email to newsletter" });
       }
     });
 
